@@ -54,9 +54,9 @@ def clipped_relu(value):
     return K.relu(value, max_value=20)
 
 
-def create_network(nb_features, nb_labels, padding_value, units=512, output_dim=5, 
+def create_network(features, labels, padding_value, units=512, output_dim=5, 
                    dropout=0.2):
-    input_data = Input(name='input', shape=(None, nb_features))
+    input_data = Input(name='input', shape=(None, features))
 
     masking = Masking(mask_value=padding_value)(input_data)
     noise = GaussianNoise(0.01)(input_data)
@@ -85,22 +85,21 @@ def create_network(nb_features, nb_labels, padding_value, units=512, output_dim=
                                    name='fc_4')(blstm1)
     dense1 = TimeDistributed(Dropout(dropout), name='dropout_4')(dense0)
 
-    dense2 = TimeDistributed(Dense(nb_labels + 1, name="dense"))(dense1)
+    dense2 = TimeDistributed(Dense(labels + 1, name="dense"))(dense1)
     y_pred = Activation('softmax', name='softmax')(dense2)
     network = CTCModel([input_data], [y_pred])
     network.compile(Adam())
     return network
 
 
-nb_labels = 4
-batch_size = 100
-nb_epochs = 10
-nb_features = 1
+labels = 4
+batch_size = 50
+epochs = 10
+features = 1
 padding_value = 100
-num_of_epochs = 1
 
 K.clear_session()
-network = create_network(nb_features, nb_labels, padding_value)
+network = create_network(features, labels, padding_value)
 
 X_val, y_val = prepare_data(10, train=False).__next__()
 es = EarlyStopping(monitor='val_loss', mode='min')
@@ -109,7 +108,7 @@ mc = ModelCheckpoint('best_model.h5', monitor='val_loss', mode='min',
                      verbose=1, save_best_only=True)
 lr_cb = ReduceLROnPlateau(factor=0.2, patience=5, verbose=0, epsilon=0.1, 
                           min_lr=0.0000001)
-network.fit_generator(prepare_data(batch_size), steps_per_epoch=1000, epochs=1,
+network.fit_generator(prepare_data(batch_size), steps_per_epoch=2000, epochs=epochs,
                       validation_data=(X_val, y_val), callbacks=[es, mc, lr_cb])
 
 pred = network.predict([X_val[0], X_val[2]], batch_size=batch_size, 
