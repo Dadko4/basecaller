@@ -12,13 +12,13 @@ from keras.metrics import categorical_accuracy, mean_squared_error
 from keras.callbacks import BaseLogger, ModelCheckpoint, EarlyStopping, TensorBoard, ReduceLROnPlateau
 from keras import backend as K
 from keras.initializers import Ones, Zeros, glorot_normal
-from CTCModel_v2 import CTCModel
+from CTCModel import CTCModel
 
 import tensorflow as tf
 import h5py
 import numpy as np
-from chiron_input import read_raw_data_sets
-tf.compat.v1.enable_eager_execution()
+from chiron_input import read_raw_data_sets, padding
+# tf.compat.v1.enable_eager_execution()
 
 def plot_signal(signal):
     X = [i for i in range(len(signal))]
@@ -26,7 +26,7 @@ def plot_signal(signal):
     plt.show()
 
 train_ds = read_raw_data_sets(r"C:\Users\dadom\Desktop\Chiron-master\train\\",
-                              max_segments_num=10000)
+                              max_segments_num=100000)
 eval_ds = read_raw_data_sets(r"C:\Users\dadom\Desktop\Chiron-master\eval\\",
                              max_segments_num=1000)
 
@@ -88,12 +88,12 @@ def create_network(nb_features, nb_labels, padding_value, units=512, output_dim=
     dense2 = TimeDistributed(Dense(nb_labels + 1, name="dense"))(dense1)
     y_pred = Activation('softmax', name='softmax')(dense2)
     network = CTCModel([input_data], [y_pred])
-    network.compile(Adam(lr=0.0001))
+    network.compile(Adam())
     return network
 
 
 nb_labels = 4
-batch_size = 32
+batch_size = 100
 nb_epochs = 10
 nb_features = 1
 padding_value = 100
@@ -102,10 +102,17 @@ num_of_epochs = 1
 K.clear_session()
 network = create_network(nb_features, nb_labels, padding_value)
 
-X_val, y_val = prepare_data(1000, train=False).__next__()
+X_val, y_val = prepare_data(10, train=False).__next__()
 es = EarlyStopping(monitor='val_loss', mode='min')
-lr = LearningRateScheduler(schedule, verbose=0)
+# lr = LearningRateScheduler(schedule, verbose=0)
 mc = ModelCheckpoint('best_model.h5', monitor='val_loss', mode='min', 
                      verbose=1, save_best_only=True)
-network.fit_generator(prepare_data(50), steps_per_epoch=2000, epochs=200,
-                      validation_data=(X_val, y_val), callbacks=[es, mc, lr])
+lr_cb = ReduceLROnPlateau(factor=0.2, patience=5, verbose=0, epsilon=0.1, 
+                          min_lr=0.0000001)
+network.fit_generator(prepare_data(batch_size), steps_per_epoch=1000, epochs=1,
+                      validation_data=(X_val, y_val), callbacks=[es, mc, lr_cb])
+
+pred = network.predict([X_val[0], X_val[2]], batch_size=batch_size, 
+                        max_value=padding_value)
+for i in range(10):
+    print("Prediction :", [j for j in pred[i] if j!=-1])
