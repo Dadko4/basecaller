@@ -672,6 +672,8 @@ def padding(x, L, padding_list=None):
     assert len_x <= L, "Length of vector x is larger than the padding length"
     zero_n = L - len_x
     if padding_list is None:
+        if not isinstance(x, list):
+            x = list(x)
         x.extend([0] * zero_n)
     elif len(padding_list) < zero_n:
         x.extend(padding_list + [0] * (zero_n - len(padding_list)))

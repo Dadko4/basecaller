@@ -6,7 +6,7 @@ import collections
 from keras.models import Sequential, Model
 from keras.callbacks import Callback
 from keras.layers import *
-from keras.optimizers import Adam, SGD
+from keras.optimizers import Nadam, SGD
 from keras.activations import relu
 from keras.metrics import categorical_accuracy, mean_squared_error
 from keras.callbacks import BaseLogger, ModelCheckpoint, EarlyStopping, TensorBoard, ReduceLROnPlateau
@@ -59,36 +59,50 @@ def create_network(features, labels, padding_value, units=512, output_dim=5,
     input_data = Input(name='input', shape=(None, features))
 
     masking = Masking(mask_value=padding_value)(input_data)
-    noise = GaussianNoise(0.01)(input_data)
-    
-    cnn0 = Conv1D(filters=units, kernel_size=5, strides=1, activation=clipped_relu,
-               kernel_initializer='glorot_uniform', bias_initializer='random_normal',
-               name='conv_1')(input_data)
-    dropout0 = TimeDistributed(Dropout(dropout), name='dropout_1')(cnn0)
 
-    cnn1 = Conv1D(filters=units, kernel_size=5, strides=1, activation=clipped_relu,
-               kernel_initializer='glorot_uniform', bias_initializer='random_normal',
-               name='conv_2')(dropout0)
-    dropout1 = TimeDistributed(Dropout(dropout), name='dropout_2')(cnn1)
+    # pad = ZeroPadding1D(padding=(0, 500))(input_data)
+    noise = GaussianNoise(0.01)(masking)
+    dense0 = TimeDistributed(Dense(units=units, kernel_initializer='random_normal',
+                                   bias_initializer='random_normal', activation=clipped_relu), 
+                            name='fc_0')(noise)
+    dropout0 = TimeDistributed(Dropout(dropout), name='dropout_0')(dense0)
+    dense1 = TimeDistributed(Dense(units=units, kernel_initializer='random_normal',
+                                   bias_initializer='random_normal', activation=clipped_relu), 
+                            name='fc_1')(dropout0)
+    dropout1 = TimeDistributed(Dropout(dropout), name='dropout_1')(dense1)
+    dense2 = TimeDistributed(Dense(units=units, kernel_initializer='random_normal',
+                                   bias_initializer='random_normal', activation=clipped_relu), 
+                            name='fc_2')(dropout1)
+    dropout2 = TimeDistributed(Dropout(dropout), name='dropout_2')(dense2)
 
-    cnn2 = Conv1D(filters=units, kernel_size=5, strides=2, activation=clipped_relu,
-               kernel_initializer='glorot_uniform', bias_initializer='random_normal',
-               name='conv_3')(dropout1)
-    dropout2 = TimeDistributed(Dropout(dropout), name='dropout_3')(cnn2)
+    # cnn0 = Conv1D(filters=units, kernel_size=5, strides=1, activation=clipped_relu,
+    #            kernel_initializer='glorot_uniform', bias_initializer='random_normal',
+    #            name='conv_1')(emb)
+    # dropout0 = TimeDistributed(Dropout(dropout), name='dropout_1')(cnn0)
 
-    blstm0 = Bidirectional(LSTM(units, return_sequences=True, dropout=dropout))(noise)
+    # cnn1 = Conv1D(filters=units, kernel_size=5, strides=1, activation=clipped_relu,
+    #            kernel_initializer='glorot_uniform', bias_initializer='random_normal',
+    #            name='conv_2')(dropout0)
+    # dropout1 = TimeDistributed(Dropout(dropout), name='dropout_2')(cnn1)
+
+    # cnn2 = Conv1D(filters=units, kernel_size=5, strides=2, activation=clipped_relu,
+    #            kernel_initializer='glorot_uniform', bias_initializer='random_normal',
+    #            name='conv_3')(dropout1)
+    # dropout2 = TimeDistributed(Dropout(dropout), name='dropout_3')(cnn2)
+
+    blstm0 = Bidirectional(LSTM(units, return_sequences=True, dropout=dropout))(dropout2)
     blstm1 = Bidirectional(LSTM(units, return_sequences=True, dropout=dropout))(blstm0)
     blstm2 = Bidirectional(LSTM(units, return_sequences=True, dropout=dropout))(blstm1)
 
-    dense0 = TimeDistributed(Dense(units=units, kernel_initializer='random_normal',
+    dense3 = TimeDistributed(Dense(units=units, kernel_initializer='random_normal',
                                    bias_initializer='random_normal',activation='relu'),
-                                   name='fc_4')(blstm1)
-    dense1 = TimeDistributed(Dropout(dropout), name='dropout_4')(dense0)
+                                   name='fc_3')(blstm1)
+    dropout3 = TimeDistributed(Dropout(dropout), name='dropout_3')(dense3)
 
-    dense2 = TimeDistributed(Dense(labels + 1, name="dense"))(dense1)
-    y_pred = Activation('softmax', name='softmax')(dense2)
+    dense4 = TimeDistributed(Dense(labels + 1, name="dense"))(dropout3)
+    y_pred = Activation('softmax', name='softmax')(dense4)
     network = CTCModel([input_data], [y_pred])
-    network.compile(Adam())
+    network.compile(Nadam())
     return network
 
 
@@ -106,7 +120,7 @@ es = EarlyStopping(monitor='val_loss', mode='min')
 # lr = LearningRateScheduler(schedule, verbose=0)
 mc = ModelCheckpoint('best_model.h5', monitor='val_loss', mode='min', 
                      verbose=1, save_best_only=True)
-lr_cb = ReduceLROnPlateau(factor=0.2, patience=5, verbose=0, epsilon=0.1, 
+lr_cb = ReduceLROnPlateau(factor=0.2, patience=2, verbose=0, epsilon=0.1, 
                           min_lr=0.0000001)
 network.fit_generator(prepare_data(batch_size), steps_per_epoch=2000, epochs=epochs,
                       validation_data=(X_val, y_val), callbacks=[es, mc, lr_cb])
