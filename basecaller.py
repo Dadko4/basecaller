@@ -1,5 +1,5 @@
 import numpy as np
-from matplotlib import pyplot as plt
+# from matplotlib import pyplot as plt
 from glob import glob
 import collections
 
@@ -9,7 +9,7 @@ from keras.layers import *
 from keras.optimizers import Nadam, SGD
 from keras.activations import relu
 from keras.metrics import categorical_accuracy, mean_squared_error
-from keras.callbacks import BaseLogger, ModelCheckpoint, EarlyStopping, TensorBoard, ReduceLROnPlateau
+from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from keras import backend as K
 from keras.initializers import Ones, Zeros, glorot_normal
 from CTCModel import CTCModel
@@ -18,12 +18,14 @@ import tensorflow as tf
 import h5py
 import numpy as np
 from chiron_input import read_raw_data_sets, padding
+from Bio.pairwise2.align import globalxx
+
 # tf.compat.v1.enable_eager_execution()
 
-def plot_signal(signal):
-    X = [i for i in range(len(signal))]
-    plt.plot(X, signal)
-    plt.show()
+# def plot_signal(signal):\
+#     X = [i for i in range(len(signal))]
+#     plt.plot(X, signal)
+#     plt.show()
 
 train_ds = read_raw_data_sets(r"C:\Users\dadom\Desktop\Chiron-master\train\\",
                               max_segments_num=100000)
@@ -70,10 +72,10 @@ def create_network(features, labels, padding_value, units=512, output_dim=5,
                                    bias_initializer='random_normal', activation=clipped_relu), 
                             name='fc_1')(dropout0)
     dropout1 = TimeDistributed(Dropout(dropout), name='dropout_1')(dense1)
-    dense2 = TimeDistributed(Dense(units=units, kernel_initializer='random_normal',
-                                   bias_initializer='random_normal', activation=clipped_relu), 
-                            name='fc_2')(dropout1)
-    dropout2 = TimeDistributed(Dropout(dropout), name='dropout_2')(dense2)
+    # dense2 = TimeDistributed(Dense(units=units, kernel_initializer='random_normal',
+    #                                bias_initializer='random_normal', activation=clipped_relu), 
+    #                         name='fc_2')(dropout1)
+    # dropout2 = TimeDistributed(Dropout(dropout), name='dropout_2')(dense2)
 
     # cnn0 = Conv1D(filters=units, kernel_size=5, strides=1, activation=clipped_relu,
     #            kernel_initializer='glorot_uniform', bias_initializer='random_normal',
@@ -90,13 +92,15 @@ def create_network(features, labels, padding_value, units=512, output_dim=5,
     #            name='conv_3')(dropout1)
     # dropout2 = TimeDistributed(Dropout(dropout), name='dropout_3')(cnn2)
 
-    blstm0 = Bidirectional(LSTM(units, return_sequences=True, dropout=dropout))(dropout2)
+    blstm0 = Bidirectional(LSTM(units, return_sequences=True, dropout=dropout))(dropout1)
     blstm1 = Bidirectional(LSTM(units, return_sequences=True, dropout=dropout))(blstm0)
     blstm2 = Bidirectional(LSTM(units, return_sequences=True, dropout=dropout))(blstm1)
+    blstm3 = Bidirectional(LSTM(units, return_sequences=True, dropout=dropout))(blstm2)
+    dropout2 = Bidirectional(LSTM(units, return_sequences=True, dropout=dropout))(blstm3)
 
     dense3 = TimeDistributed(Dense(units=units, kernel_initializer='random_normal',
                                    bias_initializer='random_normal',activation='relu'),
-                                   name='fc_3')(blstm1)
+                                   name='fc_3')(dropout2)
     dropout3 = TimeDistributed(Dropout(dropout), name='dropout_3')(dense3)
 
     dense4 = TimeDistributed(Dense(labels + 1, name="dense"))(dropout3)
@@ -107,7 +111,7 @@ def create_network(features, labels, padding_value, units=512, output_dim=5,
 
 
 labels = 4
-batch_size = 50
+batch_size = 100
 epochs = 10
 features = 1
 padding_value = 100
@@ -116,16 +120,29 @@ K.clear_session()
 network = create_network(features, labels, padding_value)
 
 X_val, y_val = prepare_data(10, train=False).__next__()
-es = EarlyStopping(monitor='val_loss', mode='min')
-# lr = LearningRateScheduler(schedule, verbose=0)
-mc = ModelCheckpoint('best_model.h5', monitor='val_loss', mode='min', 
-                     verbose=1, save_best_only=True)
+
+es = EarlyStopping(monitor='val_loss', mode='min', patience=3)
 lr_cb = ReduceLROnPlateau(factor=0.2, patience=2, verbose=0, epsilon=0.1, 
                           min_lr=0.0000001)
-network.fit_generator(prepare_data(batch_size), steps_per_epoch=2000, epochs=epochs,
-                      validation_data=(X_val, y_val), callbacks=[es, mc, lr_cb])
+network.fit_generator(prepare_data(batch_size), steps_per_epoch=1000, epochs=epochs,
+                      validation_data=(X_val, y_val), callbacks=[es, lr_cb])
+
+network.save_model('models/')
 
 pred = network.predict([X_val[0], X_val[2]], batch_size=batch_size, 
                         max_value=padding_value)
+
+accuracies = []
+for y_true, y_pred in zip(y_val, pred):
+    y_true = ''.join(y_true)
+    y_pred = ''.join(y_pred)
+    align = np.array(globalxx(y_true, y_pred))[:, [2, -1]].astype('float16')
+    align_score_ix = align[:, 0].argmax()
+    align_score = align[:, 0][align_score_ix]
+    align_length = align[:, 1][align_score_ix]
+    accuracies.append(align_score/align_length)
+
+
+
 for i in range(10):
     print("Prediction :", [j for j in pred[i] if j!=-1])

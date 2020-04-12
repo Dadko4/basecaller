@@ -697,7 +697,7 @@ def batch2sparse(label_batch):
     return indices, values, shape
 
 
-def base2ind(base, alphabet_n=4, base_n=1):
+def base2ind(base, alphabet_n=4, base_n=1, reverse=False):
     """base to 1-hot vector,
     Input Args:
         base: current base,can be AGCT, or AGCTX for methylation.
