@@ -19,6 +19,7 @@ import h5py
 import numpy as np
 from chiron_input import read_raw_data_sets, padding
 from Bio.pairwise2.align import globalxx
+import pickle
 
 # tf.compat.v1.enable_eager_execution()
 
@@ -142,7 +143,11 @@ for y_true, y_pred in zip(y_val, pred):
     align_length = align[:, 1][align_score_ix]
     accuracies.append(align_score/align_length)
 
+with open('y_pred.pickle', 'wb') as handle:
+    pickle.dump(y_pred, handle, protocol=pickle.HIGHEST_PROTOCOL)
+with open('y_true.pickle', 'wb') as handle:
+    pickle.dump(y_true, handle, protocol=pickle.HIGHEST_PROTOCOL)
+with open('accuracies.pickle', 'wb') as handle:
+    pickle.dump(accuracies, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-
-for i in range(10):
-    print("Prediction :", [j for j in pred[i] if j!=-1])
+print(np.mean(accuracies))
