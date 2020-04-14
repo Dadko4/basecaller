@@ -22,7 +22,7 @@ from six.moves import zip
 import tensorflow as tf
 # from chiron.utils import progress
 # from chiron import __version__
-from packaging import version
+#from packaging import version
 SIGNAL_DTYPE=np.int16
 raw_labels = collections.namedtuple('raw_labels', ['start', 'length', 'base'])
 MIN_LABEL_LENGTH = 2
@@ -511,7 +511,7 @@ def read_raw_data_sets(data_dir, h5py_file_path=None, seq_length=300, k_mer=1, m
     return train
 
 
-def read_signal(file_path, normalize=None):
+def read_signal(file_path, normalize=MEDIAN):
     f_h = open(file_path, 'r')
     signal = list()
     for line in f_h:
@@ -697,7 +697,7 @@ def batch2sparse(label_batch):
     return indices, values, shape
 
 
-def base2ind(base, alphabet_n=4, base_n=1, reverse=False):
+def base2ind(base, alphabet_n=4, base_n=1):
     """base to 1-hot vector,
     Input Args:
         base: current base,can be AGCT, or AGCTX for methylation.
